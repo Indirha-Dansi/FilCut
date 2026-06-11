@@ -1,0 +1,40 @@
+// src/utils/theme.ts
+
+export const COLORS = {
+  primary: '#E8294C',
+  primaryLight: '#FF4D6D',
+  primaryDark: '#C01E3A',
+  secondary: '#8A2BE2',
+  bgDark: '#0D0D0D',
+  bgCard: '#1A1A1A',
+  bgCardLight: '#242424',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#AAAAAA',
+  textMuted: '#666666',
+  success: '#22C55E',
+  warning: '#F59E0B',
+  error: '#EF4444',
+  accentGold: '#FFB800',
+};
+
+export const SIZES = {
+  xs: 4,
+  sm: 8,
+  md: 16,
+  lg: 24,
+  xl: 32,
+  xxl: 48,
+  textXs: 11,
+  textSm: 13,
+  textBase: 15,
+  textLg: 18,
+  textXl: 22,
+  text2xl: 28,
+  text3xl: 36,
+  radiusSm: 8,
+  radiusMd: 12,
+  radiusLg: 20,
+  radiusFull: 9999,
+  buttonHeight: 52,
+  inputHeight: 52,
+};
