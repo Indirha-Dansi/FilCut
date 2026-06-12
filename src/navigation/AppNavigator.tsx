@@ -24,8 +24,11 @@ export default function AppNavigator() {
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="MediaPicker" component={MediaPickerScreen as any} />
         <Stack.Screen name="VideoEditor" component={VideoEditorScreen} />
-        <Stack.Screen name="PhotoEditor" component={PhotoEditorScreen} />
+        {/* <Stack.Screen name="PhotoEditor" component={PhotoEditorScreen} /> */}
+        {/* <Stack.Screen name="VideoEditor" component={VideoEditorScreen} /> */}
+        <Stack.Screen name="PhotoEditor" component={PhotoEditorScreen as any} />
         <Stack.Screen name="CollageEditor" component={CollageEditorScreen as any} />
+        {/* <Stack.Screen name="CollageEditor" component={CollageEditorScreen as any} /> */}
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="Account" component={AccountScreen} />
       </Stack.Navigator>

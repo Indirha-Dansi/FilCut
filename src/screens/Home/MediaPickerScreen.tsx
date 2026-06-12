@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,14 @@ import {
   Alert,
   StatusBar,
   SafeAreaView,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
+import {
+  launchImageLibrary,
+  Asset,
+  ImageLibraryOptions,
+} from 'react-native-image-picker';
 
 const { width } = Dimensions.get('window');
 const scale = width / 375;
@@ -17,29 +24,13 @@ const rs = (size: number) => Math.round(size * scale);
 
 const COLORS = {
   primary:   '#E8294C',
-  secondary: '#8A2BE2',
   bgDark:    '#0D0D0D',
   bgCard:    '#1A1A1A',
   bgLight:   '#242424',
   text:      '#FFFFFF',
   textGray:  '#AAAAAA',
   textMuted: '#666666',
-  success:   '#22C55E',
 };
-
-// ── Médias simulés (en production → CameraRoll) ───────────────────────────
-const MOCK_MEDIA = Array.from({ length: 30 }, (_, i) => ({
-  id: String(i + 1),
-  type: i % 5 === 0 ? 'video' : 'photo',
-  duration: i % 5 === 0
-    ? `0:${String(Math.floor(Math.random() * 55) + 5).padStart(2, '0')}`
-    : null,
-  color: [
-    '#E8294C', '#8A2BE2', '#FF6B35', '#22C55E',
-    '#3B82F6', '#F59E0B', '#EC4899', '#06B6D4',
-  ][i % 8],
-  emoji: i % 5 === 0 ? '🎬' : ['🌅', '🏙', '🌿', '😊', '🎨'][i % 5],
-}));
 
 interface Props {
   navigation: any;
@@ -53,93 +44,81 @@ interface Props {
 
 export default function MediaPickerScreen({ navigation, route }: Props) {
   const { mode, collageMode } = route.params;
-  const [selected, setSelected] = useState<string[]>([]);
-  const [filter, setFilter] = useState<'all' | 'photo' | 'video'>('all');
+  const [selected, setSelected] = useState<Asset[]>([]);
+  const [loading, setLoading]   = useState(false);
 
-  // Limite de sélection selon le mode
   const maxSelect = mode === 'collage' ? 9 : mode === 'video' ? 10 : 1;
 
-  // Labels
   const modeLabel: Record<string, string> = {
     video:   'Vidéo',
     photo:   'Photo',
     collage: 'Collage',
   };
 
-  // ── Sélection ─────────────────────────────────────────────────────────────
-  const toggleSelect = (id: string) => {
-    if (selected.includes(id)) {
-      setSelected(selected.filter((s) => s !== id));
-    } else {
-      if (selected.length >= maxSelect) {
-        Alert.alert(
-          'Limite atteinte',
-          `Maximum ${maxSelect} élément(s) pour ce mode.`,
-        );
+  // ── Ouvrir la galerie ──────────────────────────────────────────────────────
+  const openGallery = async () => {
+    setLoading(true);
+
+    const options: ImageLibraryOptions = {
+      mediaType: mode === 'video' ? 'video' : mode === 'photo' ? 'photo' : 'mixed',
+      selectionLimit: maxSelect,
+      includeBase64: false,
+      quality: 1,
+    };
+
+    try {
+      const result = await launchImageLibrary(options);
+
+      if (result.didCancel) {
+        setLoading(false);
         return;
       }
-      setSelected([...selected, id]);
+
+      if (result.errorCode) {
+        Alert.alert('Erreur', result.errorMessage || 'Impossible d\'accéder à la galerie.');
+        setLoading(false);
+        return;
+      }
+
+      if (result.assets && result.assets.length > 0) {
+        setSelected(result.assets);
+      }
+    } catch (err) {
+      Alert.alert('Erreur', 'Impossible d\'ouvrir la galerie.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // ── Confirmer la sélection ─────────────────────────────────────────────────
+  // Ouvrir automatiquement la galerie au démarrage
+  useEffect(() => {
+    openGallery();
+  }, []);
+
+  // ── Confirmer ──────────────────────────────────────────────────────────────
   const handleConfirm = () => {
     if (selected.length === 0) {
       Alert.alert('Aucune sélection', 'Sélectionnez au moins un fichier.');
       return;
     }
+
+    const uris = selected.map((a) => a.uri || '').filter(Boolean);
+
     if (mode === 'video') {
-      navigation.navigate('VideoEditor');
+      navigation.navigate('VideoEditor', { mediaUris: uris });
     } else if (mode === 'photo') {
-      navigation.navigate('PhotoEditor');
+      navigation.navigate('PhotoEditor', { mediaUris: uris });
     } else {
-      navigation.navigate('CollageEditor', { collageMode });
+      navigation.navigate('CollageEditor', { mediaUris: uris, collageMode });
     }
   };
 
-  // ── Filtrage ───────────────────────────────────────────────────────────────
-  const filteredMedia = MOCK_MEDIA.filter((m) => {
-    if (filter === 'all') return true;
-    return m.type === filter;
-  });
-
-  // ── Rendu d'une cellule ────────────────────────────────────────────────────
-  const THUMB = (width - 3) / 3;
-
-  const renderItem = ({ item }: { item: typeof MOCK_MEDIA[0] }) => {
-    const idx = selected.indexOf(item.id);
-    const isSelected = idx !== -1;
-
-    return (
-      <TouchableOpacity
-        style={[styles.thumb, { width: THUMB, height: THUMB }]}
-        onPress={() => toggleSelect(item.id)}
-        activeOpacity={0.8}
-      >
-        {/* Aperçu coloré simulé */}
-        <View style={[styles.thumbBg, { backgroundColor: item.color }]}>
-          <Text style={styles.thumbEmoji}>{item.emoji}</Text>
-          {item.duration && (
-            <View style={styles.durationBadge}>
-              <Text style={styles.durationText}>{item.duration}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Overlay sélectionné */}
-        {isSelected && (
-          <View style={styles.selectedOverlay}>
-            <View style={styles.selectedBadge}>
-              <Text style={styles.selectedNumber}>{idx + 1}</Text>
-            </View>
-          </View>
-        )}
-
-        {/* Cercle vide non sélectionné */}
-        {!isSelected && <View style={styles.unselectedCircle} />}
-      </TouchableOpacity>
-    );
+  // ── Retirer un élément ─────────────────────────────────────────────────────
+  const removeItem = (uri: string) => {
+    setSelected(selected.filter((a) => a.uri !== uri));
   };
+
+  const THUMB = (width - rs(4)) / 3;
 
   return (
     <>
@@ -149,17 +128,12 @@ export default function MediaPickerScreen({ navigation, route }: Props) {
 
           {/* ══════════ HEADER ══════════ */}
           <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={() => navigation.goBack()}
-            >
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => navigation.goBack()}>
               <Text style={styles.cancelText}>✕</Text>
             </TouchableOpacity>
 
             <View style={styles.headerCenter}>
-              <Text style={styles.headerTitle}>
-                {modeLabel[mode]}
-              </Text>
+              <Text style={styles.headerTitle}>{modeLabel[mode]}</Text>
               <Text style={styles.headerSub}>
                 {selected.length > 0
                   ? `${selected.length} / ${maxSelect} sélectionné(s)`
@@ -167,72 +141,86 @@ export default function MediaPickerScreen({ navigation, route }: Props) {
               </Text>
             </View>
 
-            {/* Bouton Suivant */}
             {selected.length > 0 ? (
-              <TouchableOpacity
-                style={styles.nextBtn}
-                onPress={handleConfirm}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.nextBtnText}>
-                  Suivant ({selected.length})
-                </Text>
+              <TouchableOpacity style={styles.nextBtn} onPress={handleConfirm}>
+                <Text style={styles.nextBtnText}>Suivant ({selected.length})</Text>
               </TouchableOpacity>
             ) : (
-              <View style={{ width: rs(80) }} />
+              <View style={{ width: rs(90) }} />
             )}
           </View>
 
-          {/* ══════════ FILTRES ══════════ */}
-          <View style={styles.filterBar}>
-            {(['all', 'photo', 'video'] as const).map((f) => (
-              <TouchableOpacity
-                key={f}
-                style={[
-                  styles.filterBtn,
-                  filter === f && styles.filterBtnActive,
-                ]}
-                onPress={() => setFilter(f)}
-              >
-                <Text style={[
-                  styles.filterBtnText,
-                  filter === f && styles.filterBtnTextActive,
-                ]}>
-                  {f === 'all' ? 'Tout' : f === 'photo' ? '📷 Photos' : '🎬 Vidéos'}
-                </Text>
+          {/* ══════════ CONTENU ══════════ */}
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator color={COLORS.primary} size="large" />
+              <Text style={styles.loadingText}>Chargement...</Text>
+            </View>
+          ) : selected.length === 0 ? (
+            // ── Aucune sélection — invite à ouvrir la galerie ──
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>🖼️</Text>
+              <Text style={styles.emptyTitle}>Aucun fichier sélectionné</Text>
+              <Text style={styles.emptySubtitle}>
+                Appuyez sur le bouton ci-dessous pour ouvrir votre galerie
+              </Text>
+              <TouchableOpacity style={styles.openGalleryBtn} onPress={openGallery}>
+                <Text style={styles.openGalleryText}>📂 Ouvrir la galerie</Text>
               </TouchableOpacity>
-            ))}
-          </View>
+            </View>
+          ) : (
+            // ── Grille des fichiers sélectionnés ──
+            <>
+              <View style={styles.selectedInfo}>
+                <Text style={styles.selectedInfoText}>
+                  ✅ {selected.length} fichier(s) sélectionné(s)
+                </Text>
+                <TouchableOpacity onPress={openGallery}>
+                  <Text style={styles.changeText}>Modifier</Text>
+                </TouchableOpacity>
+              </View>
 
-          {/* ══════════ GRILLE MÉDIAS ══════════ */}
-          <FlatList
-            data={filteredMedia}
-            keyExtractor={(item) => item.id}
-            numColumns={3}
-            renderItem={renderItem}
-            contentContainerStyle={styles.grid}
-            showsVerticalScrollIndicator={false}
-            ItemSeparatorComponent={() => <View style={{ height: 1.5 }} />}
-          />
+              <FlatList
+                data={selected}
+                keyExtractor={(item, index) => item.uri || String(index)}
+                numColumns={3}
+                contentContainerStyle={styles.grid}
+                renderItem={({ item }) => (
+                  <View style={[styles.thumb, { width: THUMB, height: THUMB }]}>
+                    {item.uri && (
+                      <Image
+                        source={{ uri: item.uri }}
+                        style={styles.thumbImage}
+                        resizeMode="cover"
+                      />
+                    )}
+                    {/* Badge type */}
+                    {item.type?.includes('video') && (
+                      <View style={styles.videoBadge}>
+                        <Text style={styles.videoBadgeText}>🎬</Text>
+                      </View>
+                    )}
+                    {/* Bouton supprimer */}
+                    <TouchableOpacity
+                      style={styles.removeBtn}
+                      onPress={() => removeItem(item.uri || '')}
+                    >
+                      <Text style={styles.removeBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              />
+            </>
+          )}
 
           {/* ══════════ BARRE FLOTTANTE ══════════ */}
           {selected.length > 0 && (
             <View style={styles.floatingBar}>
-              <TouchableOpacity
-                onPress={() => setSelected([])}
-                style={styles.clearBtn}
-              >
+              <TouchableOpacity style={styles.clearBtn} onPress={() => setSelected([])}>
                 <Text style={styles.clearBtnText}>Tout effacer</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.confirmBtn}
-                onPress={handleConfirm}
-                activeOpacity={0.9}
-              >
-                <Text style={styles.confirmBtnText}>
-                  Confirmer  →
-                </Text>
+              <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm}>
+                <Text style={styles.confirmBtnText}>Confirmer  →</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -244,16 +232,9 @@ export default function MediaPickerScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: COLORS.bgDark,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.bgDark,
-  },
+  safe: { flex: 1, backgroundColor: COLORS.bgDark },
+  container: { flex: 1, backgroundColor: COLORS.bgDark },
 
-  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -264,142 +245,84 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255,255,255,0.06)',
   },
   cancelBtn: {
-    width: rs(36),
-    height: rs(36),
-    borderRadius: rs(18),
+    width: rs(36), height: rs(36), borderRadius: rs(18),
     backgroundColor: COLORS.bgCard,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
-  cancelText: {
-    color: COLORS.text,
-    fontSize: rs(16),
-    fontWeight: '600',
-  },
-  headerCenter: {
-    alignItems: 'center',
-    flex: 1,
-    marginHorizontal: rs(8),
-  },
-  headerTitle: {
-    color: COLORS.text,
-    fontSize: rs(16),
-    fontWeight: '700',
-  },
-  headerSub: {
-    color: COLORS.textMuted,
-    fontSize: rs(12),
-    marginTop: rs(2),
-  },
+  cancelText: { color: COLORS.text, fontSize: rs(16), fontWeight: '600' },
+  headerCenter: { alignItems: 'center', flex: 1, marginHorizontal: rs(8) },
+  headerTitle: { color: COLORS.text, fontSize: rs(16), fontWeight: '700' },
+  headerSub: { color: COLORS.textMuted, fontSize: rs(12), marginTop: rs(2) },
   nextBtn: {
     backgroundColor: COLORS.primary,
-    paddingHorizontal: rs(14),
+    paddingHorizontal: rs(12),
     paddingVertical: rs(8),
     borderRadius: rs(20),
-    width: rs(80),
+    width: rs(90),
     alignItems: 'center',
   },
-  nextBtnText: {
-    color: COLORS.text,
-    fontWeight: '700',
-    fontSize: rs(12),
-  },
+  nextBtnText: { color: COLORS.text, fontWeight: '700', fontSize: rs(11) },
 
-  // Filtres
-  filterBar: {
+  // Loading
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: rs(16) },
+  loadingText: { color: COLORS.textMuted, fontSize: rs(14) },
+
+  // Empty
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: rs(40) },
+  emptyEmoji: { fontSize: rs(64), marginBottom: rs(16) },
+  emptyTitle: { color: COLORS.text, fontSize: rs(18), fontWeight: '700', marginBottom: rs(8), textAlign: 'center' },
+  emptySubtitle: { color: COLORS.textGray, fontSize: rs(14), textAlign: 'center', lineHeight: rs(20), marginBottom: rs(32) },
+  openGalleryBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: rs(32),
+    paddingVertical: rs(14),
+    borderRadius: rs(24),
+  },
+  openGalleryText: { color: COLORS.text, fontWeight: '700', fontSize: rs(15) },
+
+  // Selected info
+  selectedInfo: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: rs(16),
     paddingVertical: rs(10),
-    gap: rs(8),
-    backgroundColor: COLORS.bgDark,
   },
-  filterBtn: {
-    paddingHorizontal: rs(16),
-    paddingVertical: rs(6),
-    borderRadius: rs(20),
-    backgroundColor: COLORS.bgCard,
-  },
-  filterBtnActive: {
-    backgroundColor: COLORS.primary,
-  },
-  filterBtnText: {
-    color: COLORS.textMuted,
-    fontSize: rs(13),
-    fontWeight: '600',
-  },
-  filterBtnTextActive: {
-    color: COLORS.text,
-  },
+  selectedInfoText: { color: COLORS.text, fontSize: rs(13), fontWeight: '600' },
+  changeText: { color: COLORS.primary, fontSize: rs(13), fontWeight: '700' },
 
-  // Grille
-  grid: {
-    gap: 1.5,
-  },
+  // Grid
+  grid: { gap: rs(2) },
   thumb: {
-    marginRight: 1.5,
+    marginRight: rs(2),
     overflow: 'hidden',
     position: 'relative',
+    backgroundColor: COLORS.bgCard,
   },
-  thumbBg: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  thumbEmoji: {
-    fontSize: rs(32),
-  },
-  durationBadge: {
+  thumbImage: { width: '100%', height: '100%' },
+  videoBadge: {
     position: 'absolute',
     bottom: rs(4),
-    right: rs(4),
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: rs(5),
-    paddingVertical: rs(2),
+    left: rs(4),
+    backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: rs(4),
+    padding: rs(2),
   },
-  durationText: {
-    color: COLORS.text,
-    fontSize: rs(10),
-    fontWeight: '700',
-  },
- selectedOverlay: {
+  videoBadgeText: { fontSize: rs(12) },
+  removeBtn: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(232,41,76,0.35)',
-  },
-  selectedBadge: {
-    position: 'absolute',
-    top: rs(6),
-    right: rs(6),
-    width: rs(24),
-    height: rs(24),
-    borderRadius: rs(12),
-    backgroundColor: COLORS.primary,
+    top: rs(4),
+    right: rs(4),
+    width: rs(22),
+    height: rs(22),
+    borderRadius: rs(11),
+    backgroundColor: 'rgba(0,0,0,0.7)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.text,
   },
-  selectedNumber: {
-    color: COLORS.text,
-    fontSize: rs(12),
-    fontWeight: '800',
-  },
-  unselectedCircle: {
-    position: 'absolute',
-    top: rs(6),
-    right: rs(6),
-    width: rs(24),
-    height: rs(24),
-    borderRadius: rs(12),
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.7)',
-  },
+  removeBtnText: { color: '#fff', fontSize: rs(10), fontWeight: '800' },
 
-  // Barre flottante
+  // Floating bar
   floatingBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -411,23 +334,13 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255,255,255,0.06)',
     paddingBottom: rs(28),
   },
-  clearBtn: {
-    paddingVertical: rs(10),
-  },
-  clearBtnText: {
-    color: COLORS.textGray,
-    fontSize: rs(14),
-    fontWeight: '500',
-  },
+  clearBtn: { paddingVertical: rs(10) },
+  clearBtnText: { color: COLORS.textGray, fontSize: rs(14) },
   confirmBtn: {
     backgroundColor: COLORS.primary,
     paddingHorizontal: rs(28),
     paddingVertical: rs(12),
     borderRadius: rs(24),
   },
-  confirmBtnText: {
-    color: COLORS.text,
-    fontWeight: '800',
-    fontSize: rs(15),
-  },
+  confirmBtnText: { color: COLORS.text, fontWeight: '800', fontSize: rs(15) },
 });
